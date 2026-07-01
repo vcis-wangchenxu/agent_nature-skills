@@ -1,6 +1,10 @@
 # agent_nature-skills
 
-面向 **RL / MARL / LLM / LLM Agent** 方向的 Nature-style 科研技能库。本仓库基于 `nature-skills` 的可复用目录思想重构：保留原始安装级结构和 14 个 `nature-*` 技能入口，但将规则、检查项、输出格式和审稿风险全部改造成强化学习、多智能体强化学习、大语言模型和智能体系统论文场景。
+面向 **RL / MARL / LLM / LLM Agent** 方向的 Nature-style 科研技能库。
+
+本仓库现在采用 **方案 B：完整原版 nature-skills + 领域增强 overlay**。
+
+也就是说，它不再只是轻量版 `README.md + SKILL.md`，而是在安装时先拉取原始 `Yuan1z0825/nature-skills` 的完整文件树，再叠加本仓库的 RL/MARL/LLM/LLM Agent 规则。这样可以保留原始仓库的 `manifest.yaml`、`static/`、`references/`、脚本、模板和复杂 router 能力，同时让 Codex 在处理你的研究方向时自动加载领域增强规则。
 
 ## 适用场景
 
@@ -8,59 +12,76 @@
 - RL、Offline RL、RLHF/RLAIF、MARL、Ad Hoc Teamwork、Zero-Shot Coordination、LLM Agent、Tool-use Agent、Multi-agent LLM、Agent Safety、Agent Evaluation 等论文写作与审查。
 - 论文从选题、文献检索、方法叙述、实验设计、科研绘图、审稿模拟、response letter、数据与代码可用性声明到汇报 PPT 的全流程辅助。
 
-## 与原版 nature-skills 的关系
+## 方案 B 的工作方式
 
-本仓库保留原仓库的安装习惯：
+运行：
 
-```text
-scripts/update-codex-skills.sh
-skills/_shared/
-skills/nature-figure/
-skills/nature-polishing/
-skills/nature-writing/
-skills/nature-reviewer/
-skills/nature-citation/
-skills/nature-data/
-skills/nature-reader/
-skills/nature-response/
-skills/nature-paper2ppt/
-skills/nature-paper-to-patent/
-skills/nature-academic-search/
-skills/nature-downloader/
-skills/nature-literature-pipeline/
-skills/nature-proposal-writer/
+```bash
+scripts/update-codex-skills.sh --pull
 ```
 
-核心改动不是把 Nature 风格泛化地套到所有论文上，而是增加了 AI/RL 论文最容易被审稿人质疑的内容：
+脚本会执行以下流程：
 
-1. 问题定义是否清楚：MDP / POMDP / Dec-POMDP / Markov game / LLM-agent loop 是否写明。
-2. 方法贡献是否真实：新算法、新训练范式、新评测协议、新系统框架、新理论边界是否区分。
-3. 实验是否足够强：强基线、公平算力、随机种子、置信区间、消融、泛化、跨任务、跨模型、开销分析。
-4. LLM Agent 是否可复现：模型版本、prompt、tool schema、memory、planner、environment、失败处理、日志与轨迹。
-5. MARL 是否避免伪泛化：训练队友/测试队友拆分、未知伙伴、未知任务、零样本设置、CTDE/去中心化执行边界。
-6. Safety / ethics / misuse 是否可交代：agent 自主执行、工具调用、数据泄漏、benchmark contamination、human feedback 来源。
+```text
+1. 更新当前 agent_nature-skills 仓库
+2. clone 原始完整 nature-skills 仓库
+3. 将原始仓库的 skills/ 复制到临时 staging 目录
+4. 将本仓库 overlays/skills/ 中的 RL/MARL/LLM/Agent 增强规则叠加进去
+5. 在每个 nature-*/SKILL.md 末尾注入一个 field overlay hook
+6. 将生成后的完整 skills tree 同步到 ~/.codex/skills
+7. 运行 diff 验证安装结果
+```
 
-## 安装到本地 Codex
+这样本地 Codex 实际使用的是：
 
-推荐方式：
+```text
+原版完整 nature-skills
++ manifest.yaml / static / references / scripts / templates
++ agent_nature-skills 的 RL/MARL/LLM/Agent 领域增强规则
+```
+
+## 目录说明
+
+```text
+scripts/update-codex-skills.sh       # 方案 B 安装脚本，默认 full upstream + overlay
+overlays/                            # 领域增强 overlay，安装时叠加到原版 nature-skills
+  skills/_shared/agent-domain-extension.md
+skills/                              # 轻量 fallback；仅在 --local-only 时使用
+```
+
+注意：`skills/` 目录仍然保留，是为了在无法访问 GitHub 或你明确使用 `--local-only` 时提供轻量 fallback。正常使用请走默认方案 B。
+
+## Mac 本地安装
+
+第一次安装：
 
 ```bash
 git clone https://github.com/vcis-wangchenxu/agent_nature-skills.git
+cd agent_nature-skills
+chmod +x scripts/update-codex-skills.sh
+scripts/update-codex-skills.sh --pull
+scripts/update-codex-skills.sh --check
+```
+
+以后更新：
+
+```bash
 cd agent_nature-skills
 scripts/update-codex-skills.sh --pull
 scripts/update-codex-skills.sh --check
 ```
 
-如果你已经 clone 过：
+如果你的网络无法访问 GitHub 上游仓库，可以临时使用轻量 fallback：
 
 ```bash
-cd agent_nature-skills
-git pull --ff-only
-scripts/update-codex-skills.sh --check
-scripts/update-codex-skills.sh
+scripts/update-codex-skills.sh --local-only
 ```
 
-安装位置默认是：
+但推荐优先使用默认方案 B，因为它会保留原始 nature-skills 的完整能力。
+
+## 安装位置
+
+默认安装到：
 
 ```bash
 ~/.codex/skills
@@ -75,52 +96,33 @@ $nature-figure 用 Python 给我生成符合 Nature 风格的 RL 训练曲线和
 $nature-response 根据这三条审稿意见帮我写逐点回复。
 ```
 
+## 领域增强覆盖的重点
+
+1. **RL**：MDP/POMDP、reward shaping、sample efficiency、seed/CI、offline/online leakage、evaluation protocol。
+2. **MARL**：Dec-POMDP/Markov game、CTDE、zero-shot coordination、unknown teammates/opponents、ad hoc teamwork、partner generalization。
+3. **LLM**：model version、prompt、decoding、benchmark contamination、baseline freshness、alignment/RLHF/RLAIF。
+4. **LLM Agent**：planner、memory、tool schema、trajectory logging、environment interaction、latency/cost、safety boundary。
+
 ## 技能索引
 
-| Skill | 状态 | 主要用途 |
-|---|---:|---|
-| `nature-writing` | Stable | RL/MARL/LLM/Agent 论文选题、摘要、引言、方法、实验、讨论写作 |
-| `nature-polishing` | Stable | 面向高水平期刊的学术英语润色、中文转英文、LaTeX 表达修正 |
-| `nature-figure` | Stable | RL 曲线、benchmark 表、消融图、agent 架构图、trajectory 图的投稿级制作与审查 |
-| `nature-reviewer` | Stable | 模拟三位审稿人，从 novelty、rigor、reproducibility、significance 评审 |
-| `nature-citation` | Beta | 构建 RL/MARL/LLM/Agent 文献证据链、引用核验、相关工作矩阵 |
-| `nature-data` | Beta | 数据、代码、模型、prompt、日志、轨迹、environment 的可用性声明 |
-| `nature-reader` | Beta | 精读论文，提取问题、方法、实验、局限、可复现要点 |
-| `nature-response` | Stable | 审稿意见回复、补实验规划、rebuttal 风险控制 |
-| `nature-paper2ppt` | Beta | 从论文生成中文/英文科研汇报 PPT 大纲与讲稿 |
-| `nature-paper-to-patent` | Draft | 从算法/系统论文提炼可专利化技术方案，不替代法律意见 |
-| `nature-academic-search` | Beta | 文献检索、证据图谱、benchmark/基线追踪 |
-| `nature-downloader` | Draft | 合法获取论文全文、整理 PDF 与 BibTeX |
-| `nature-literature-pipeline` | Beta | 建立 RL/LLM Agent 每日/每周文献跟踪管线 |
-| `nature-proposal-writer` | Stable | 先建立 research proposal，再写论文，适合博士课题和 SCI 选题 |
+安装完成后，本地 Codex 会拥有原版完整 `nature-skills` 的所有技能，并额外加载本仓库的领域增强规则：
 
-## 共享设计原则
-
-所有技能都先读取或遵守 `skills/_shared/` 中的公共规则：
-
-- `field-taxonomy.md`：RL/MARL/LLM/Agent 方向分类与常见问题定义。
-- `reproducibility-checklist.md`：实验、代码、随机种子、算力、prompt、模型版本检查。
-- `nature-readiness-rubric.md`：投稿前 readiness 评分规则。
-
-## 新增或修改技能的最低要求
-
-每个技能目录至少包含：
-
-```text
-README.md
-SKILL.md
-```
-
-`SKILL.md` 必须包含：
-
-```yaml
----
-name: nature-<topic>
-description: ...
----
-```
-
-并明确：触发场景、输入范围、工作流、输出格式、红线、field-specific 审查点。
+| Skill | 主要用途 |
+|---|---|
+| `nature-writing` | RL/MARL/LLM/Agent 论文选题、摘要、引言、方法、实验、讨论写作 |
+| `nature-polishing` | 学术英语润色、中文转英文、claim 风险控制、LaTeX 表达修正 |
+| `nature-figure` | RL 曲线、benchmark 表、消融图、agent 架构图、trajectory 图 |
+| `nature-reviewer` | 模拟三位审稿人，从 novelty、rigor、reproducibility、significance 评审 |
+| `nature-response` | 审稿意见回复、补实验规划、rebuttal 风险控制 |
+| `nature-citation` | RL/MARL/LLM/Agent 文献证据链、引用核验、相关工作矩阵 |
+| `nature-data` | 数据、代码、模型、prompt、日志、轨迹、environment 的可用性声明 |
+| `nature-reader` | 精读论文，提取问题、方法、实验、局限、可复现要点 |
+| `nature-paper2ppt` | 从论文生成中文/英文科研汇报 PPT 大纲与讲稿 |
+| `nature-paper-to-patent` | 从算法/系统论文提炼可专利化技术方案，不替代法律意见 |
+| `nature-academic-search` | 文献检索、证据图谱、benchmark/基线追踪 |
+| `nature-downloader` | 合法获取论文全文、整理 PDF 与 BibTeX |
+| `nature-literature-pipeline` | 建立 RL/LLM Agent 每日/每周文献跟踪管线 |
+| `nature-proposal-writer` | 先建立 research proposal，再写论文，适合博士课题和 SCI 选题 |
 
 ## 许可证
 
