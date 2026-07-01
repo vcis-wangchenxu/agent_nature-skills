@@ -1,29 +1,43 @@
 #!/usr/bin/env bash
-# update-codex-skills.sh — install / update agent_nature-skills into Codex.
+# update-codex-skills.sh — install / update full upstream Nature Skills plus RL/MARL/LLM/Agent overlay into Codex.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-SRC="$REPO_ROOT/skills"
+LOCAL_SKILLS="$REPO_ROOT/skills"
+OVERLAY_SKILLS="$REPO_ROOT/overlays/skills"
 DST="${CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
+UPSTREAM_REPO="${AGENT_NATURE_UPSTREAM_REPO:-https://github.com/Yuan1z0825/nature-skills.git}"
+UPSTREAM_REF="${AGENT_NATURE_UPSTREAM_REF:-main}"
 PULL=0
 PRUNE=0
 CHECK_ONLY=0
+LOCAL_ONLY=0
+NO_UPSTREAM=0
 MANIFEST_NAME=".agent-nature-skills-install.txt"
 
 usage() {
   cat <<'USAGE'
-update-codex-skills.sh - install / update RL/MARL/LLM/Agent Nature skills into Codex.
+update-codex-skills.sh - install full Nature Skills + RL/MARL/LLM/Agent overlay into Codex.
+
+Default behavior, i.e. scheme B:
+  1. Clone the full upstream nature-skills repository.
+  2. Copy upstream skills/ exactly as the base.
+  3. Overlay this repository's RL/MARL/LLM/Agent extension files.
+  4. Inject a small hook into each installed SKILL.md so Codex knows to load the field overlay.
 
 Usage:
-  scripts/update-codex-skills.sh                 Copy this checkout's skills into Codex.
-  scripts/update-codex-skills.sh --pull          Run git pull --ff-only first.
-  scripts/update-codex-skills.sh --check         Verify install without copying.
+  scripts/update-codex-skills.sh                 Install full upstream + overlay.
+  scripts/update-codex-skills.sh --pull          Run git pull --ff-only for this overlay repo first.
+  scripts/update-codex-skills.sh --check         Verify installed skills against generated staging tree.
   scripts/update-codex-skills.sh --prune         Remove stale dirs previously managed by this script.
-  scripts/update-codex-skills.sh --dest /path    Override destination.
+  scripts/update-codex-skills.sh --dest /path    Override Codex skills destination.
+  scripts/update-codex-skills.sh --local-only    Use only this repository's lightweight skills; no upstream clone.
 
 Environment:
   CODEX_SKILLS_DIR=/path                         Default destination override.
+  AGENT_NATURE_UPSTREAM_REPO=url                 Override upstream nature-skills repo.
+  AGENT_NATURE_UPSTREAM_REF=branch-or-sha        Override upstream ref, default main.
 USAGE
 }
 
@@ -36,53 +50,95 @@ while [ "$#" -gt 0 ]; do
     --prune) PRUNE=1 ;;
     --check|--verify-only) CHECK_ONLY=1 ;;
     --dest) shift; [ "$#" -gt 0 ] || die "--dest requires a directory"; DST="$1" ;;
+    --local-only|--no-upstream) LOCAL_ONLY=1; NO_UPSTREAM=1 ;;
     --help|-h) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
   shift
 done
 
-[ -d "$SRC" ] || die "skills directory not found at $SRC"
+[ -d "$LOCAL_SKILLS" ] || die "local skills directory not found at $LOCAL_SKILLS"
 
 if [ "$PULL" = "1" ]; then
   if git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
-    echo "==> Pulling latest with git pull --ff-only"
+    echo "==> Pulling latest overlay repo with git pull --ff-only"
     git -C "$REPO_ROOT" pull --ff-only
   else
-    echo "==> Skipping pull: not a git checkout"
+    echo "==> Skipping pull: $REPO_ROOT is not a git checkout"
   fi
 fi
 
 need_cmd diff
+need_cmd git
 [ "$CHECK_ONLY" = "1" ] || need_cmd rsync
 
-SKILL_LIST="$(mktemp "${TMPDIR:-/tmp}/agent-nature-skills-list.XXXXXX")"
-DIFF_OUT="$(mktemp "${TMPDIR:-/tmp}/agent-nature-skills-diff.XXXXXX")"
-trap 'rm -f "$SKILL_LIST" "$DIFF_OUT"' EXIT
-
-for path in "$SRC"/*/; do
-  [ -d "$path" ] || continue
-  name="$(basename "$path")"
-  if [ "$name" != "_shared" ] && [ ! -f "$path/SKILL.md" ]; then
-    die "unexpected skills/$name directory without SKILL.md"
-  fi
-  printf '%s\n' "$name" >> "$SKILL_LIST"
-done
-sort -o "$SKILL_LIST" "$SKILL_LIST"
-[ -s "$SKILL_LIST" ] || die "no skill directories found under $SRC"
+WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/agent-nature-install.XXXXXX")"
+STAGING="$WORKDIR/staging-skills"
+SKILL_LIST="$WORKDIR/skill-list.txt"
+DIFF_OUT="$WORKDIR/diff.txt"
+trap 'rm -rf "$WORKDIR"' EXIT
+mkdir -p "$STAGING"
 
 repo_commit="unknown"
 if git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   repo_commit="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 fi
 
+build_staging() {
+  if [ "$LOCAL_ONLY" = "1" ]; then
+    echo "==> Building staging from local lightweight skills"
+    rsync -a --delete "$LOCAL_SKILLS/" "$STAGING/"
+  else
+    echo "==> Cloning full upstream Nature Skills"
+    echo "    repo: $UPSTREAM_REPO"
+    echo "    ref:  $UPSTREAM_REF"
+    git clone --depth=1 --branch "$UPSTREAM_REF" "$UPSTREAM_REPO" "$WORKDIR/upstream" >/dev/null 2>&1 || \
+      die "failed to clone upstream nature-skills. Check network access or use --local-only."
+    [ -d "$WORKDIR/upstream/skills" ] || die "upstream repository does not contain skills/"
+    rsync -a --delete "$WORKDIR/upstream/skills/" "$STAGING/"
+  fi
+
+  if [ -d "$OVERLAY_SKILLS" ]; then
+    echo "==> Applying RL/MARL/LLM/Agent overlay files"
+    rsync -a "$OVERLAY_SKILLS/" "$STAGING/"
+  fi
+
+  inject_agent_hook
+
+  : > "$SKILL_LIST"
+  for path in "$STAGING"/*/; do
+    [ -d "$path" ] || continue
+    name="$(basename "$path")"
+    if [ "$name" != "_shared" ] && [ ! -f "$path/SKILL.md" ]; then
+      die "unexpected staged $name directory without SKILL.md"
+    fi
+    printf '%s\n' "$name" >> "$SKILL_LIST"
+  done
+  sort -o "$SKILL_LIST" "$SKILL_LIST"
+  [ -s "$SKILL_LIST" ] || die "no skill directories found in staging"
+}
+
+inject_agent_hook() {
+  local hook_marker="agent_nature-skills field overlay hook"
+  local hook_text
+  hook_text='\n\n## agent_nature-skills field overlay hook\n\nWhen the user task is about reinforcement learning, multi-agent reinforcement learning, large language models, or LLM agents, also load and apply `../_shared/agent-domain-extension.md` after the original Nature-skill rules. Preserve the upstream skill workflow, router protocol, manifest/static/reference loading order, and safety rules; the agent-domain extension only adds field-specific checks for RL/MARL/LLM/Agent claims, experiments, figures, citations, reproducibility, and reviewer-risk control.\n'
+
+  for skill_file in "$STAGING"/nature-*/SKILL.md; do
+    [ -f "$skill_file" ] || continue
+    if ! grep -q "$hook_marker" "$skill_file"; then
+      printf "%b" "$hook_text" >> "$skill_file"
+    fi
+  done
+}
+
 verify_install() {
   status=0
   while IFS= read -r name; do
-    src_path="$SRC/$name"
+    src_path="$STAGING/$name"
     dst_path="$DST/$name"
     if [ ! -d "$dst_path" ]; then
-      echo "MISSING  $name"; status=1
+      echo "MISSING  $name"
+      status=1
     elif diff -qr "$src_path" "$dst_path" >"$DIFF_OUT"; then
       echo "MATCH    $name"
     else
@@ -94,18 +150,20 @@ verify_install() {
   return "$status"
 }
 
+build_staging
+
 if [ "$CHECK_ONLY" = "1" ]; then
   echo "==> Verifying Codex skills in $DST"
   verify_install
-  echo "==> Verified against $repo_commit"
+  echo "==> Verified against overlay commit $repo_commit"
   exit 0
 fi
 
 mkdir -p "$DST"
-echo "==> Syncing skills from $SRC into $DST"
+echo "==> Syncing generated full skills tree into $DST"
 while IFS= read -r name; do
   mkdir -p "$DST/$name"
-  rsync -a --delete "$SRC/$name/" "$DST/$name/"
+  rsync -a --delete "$STAGING/$name/" "$DST/$name/"
   echo "    synced $name"
 done < "$SKILL_LIST"
 
@@ -123,8 +181,11 @@ fi
 
 {
   echo "# Managed by agent_nature-skills scripts/update-codex-skills.sh"
-  echo "# source=$REPO_ROOT"
-  echo "# commit=$repo_commit"
+  echo "# mode=$([ "$LOCAL_ONLY" = "1" ] && echo local-only || echo full-upstream-plus-agent-overlay)"
+  echo "# overlay_source=$REPO_ROOT"
+  echo "# overlay_commit=$repo_commit"
+  echo "# upstream_repo=$UPSTREAM_REPO"
+  echo "# upstream_ref=$UPSTREAM_REF"
   date '+# updated_at=%Y-%m-%dT%H:%M:%S%z'
   cat "$SKILL_LIST"
 } > "$manifest"
@@ -132,4 +193,4 @@ fi
 echo "==> Verifying copied skills"
 verify_install
 
-echo "==> Done. Other skills in $DST were left untouched."
+echo "==> Done. Installed full upstream Nature Skills plus RL/MARL/LLM/Agent overlay."
