@@ -2,7 +2,7 @@
 
 面向 **RL / MARL / LLM / LLM Agent** 方向的 Nature-style 科研技能库。
 
-本仓库现在采用 **方案 B：完整原版 nature-skills + 领域增强 overlay**。
+本仓库现在采用 **完整原版 nature-skills + 领域增强 overlay**。
 
 也就是说，它不再只是轻量版 `README.md + SKILL.md`，而是在安装时先拉取原始 `Yuan1z0825/nature-skills` 的完整文件树，再叠加本仓库的 RL/MARL/LLM/LLM Agent 规则。这样可以保留原始仓库的 `manifest.yaml`、`static/`、`references/`、脚本、模板和复杂 router 能力，同时让 Codex 在处理你的研究方向时自动加载领域增强规则。
 
@@ -12,7 +12,7 @@
 - RL、Offline RL、RLHF/RLAIF、MARL、Ad Hoc Teamwork、Zero-Shot Coordination、LLM Agent、Tool-use Agent、Multi-agent LLM、Agent Safety、Agent Evaluation 等论文写作与审查。
 - 论文从选题、文献检索、方法叙述、实验设计、科研绘图、审稿模拟、response letter、数据与代码可用性声明到汇报 PPT 的全流程辅助。
 
-## 方案 B 的工作方式
+## 工作方式
 
 运行：
 
@@ -43,7 +43,7 @@ scripts/update-codex-skills.sh --pull
 ## 目录说明
 
 ```text
-scripts/update-codex-skills.sh       # 方案 B 安装脚本，默认 full upstream + overlay
+scripts/update-codex-skills.sh       # 安装脚本，默认 full upstream + overlay
 overlays/                            # 领域增强 overlay，安装时叠加到原版 nature-skills
   skills/_shared/agent-domain-extension.md
 skills/                              # 轻量 fallback；仅在 --local-only 时使用
@@ -77,7 +77,7 @@ scripts/update-codex-skills.sh --check
 scripts/update-codex-skills.sh --local-only
 ```
 
-但推荐优先使用默认方案 B，因为它会保留原始 nature-skills 的完整能力。
+会保留原始 nature-skills 的完整能力。
 
 ## 安装位置
 
