@@ -13,7 +13,6 @@ PULL=0
 PRUNE=0
 CHECK_ONLY=0
 LOCAL_ONLY=0
-NO_UPSTREAM=0
 MANIFEST_NAME=".agent-nature-skills-install.txt"
 
 usage() {
@@ -50,7 +49,7 @@ while [ "$#" -gt 0 ]; do
     --prune) PRUNE=1 ;;
     --check|--verify-only) CHECK_ONLY=1 ;;
     --dest) shift; [ "$#" -gt 0 ] || die "--dest requires a directory"; DST="$1" ;;
-    --local-only|--no-upstream) LOCAL_ONLY=1; NO_UPSTREAM=1 ;;
+    --local-only|--no-upstream) LOCAL_ONLY=1 ;;
     --help|-h) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
@@ -70,7 +69,7 @@ fi
 
 need_cmd diff
 need_cmd git
-[ "$CHECK_ONLY" = "1" ] || need_cmd rsync
+need_cmd rsync
 
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/agent-nature-install.XXXXXX")"
 STAGING="$WORKDIR/staging-skills"
