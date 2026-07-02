@@ -4,7 +4,7 @@
 
 本仓库现在采用 **完整原版 nature-skills + 领域增强 overlay**。
 
-也就是说，它不再只是轻量版 `README.md + SKILL.md`，而是在安装时先拉取原始 `Yuan1z0825/nature-skills` 的完整文件树，再叠加本仓库的 RL/MARL/LLM/LLM Agent 规则。这样可以保留原始仓库的 `manifest.yaml`、`static/`、`references/`、脚本、模板和复杂 router 能力，同时让 Codex 在处理你的研究方向时自动加载领域增强规则。
+它在安装时先拉取原始 `Yuan1z0825/nature-skills` 的完整文件树，再叠加本仓库的 RL/MARL/LLM/LLM Agent 规则。这样可以保留原始仓库的 `manifest.yaml`、`static/`、`references/`、脚本、模板和复杂 router 能力，同时让 Codex 在处理你的研究方向时自动加载领域增强规则。
 
 ## 适用场景
 
